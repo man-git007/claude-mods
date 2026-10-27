@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+settings.local.json
+
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code generated type declarations (regenerated per build; large)
+.claude-plugin/types/
+
+# Local archives and scratch
+*.zip
+*.tar
+*.tar.gz
+tmp/
