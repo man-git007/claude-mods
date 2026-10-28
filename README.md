@@ -57,7 +57,7 @@ You do not need to run `/model` to change models.
 
 This also works when Claude loads the skill itself.
 
-**How it works.** Loading a skill triggers the mod's `skill.prompt` hook, which records the phase. Its `turn.step` hook then names that phase's model on every request the main conversation makes. `/model` and your session setting are never changed.
+**How it works.** Loading a skill triggers the mod's `skill.prompt` hook, which records the phase. Its `turn.step` hook then sends that phase's model name with every request the main conversation makes. `/model` and your session setting are never changed.
 
 **Behavior**
 
@@ -65,11 +65,52 @@ This also works when Claude loads the skill itself.
 - The last skill loaded wins, so `/planner` after `/executor` switches back.
 - Subagents keep their own model.
 - The prompt cache is not shared between models, so the first request after a switch re-reads the full context at full price.
+- The models must be available on the endpoint and plan your session started with. The mod cannot switch endpoints.
 - On organization-managed installs, `skill.prompt` hooks may not run for plugins you install yourself. If the model does not switch, ask your admin to allow the plugin.
 
-**Settings** (in `/config`): `planningModel`, `executionModel`, `plannerSkill`, `executorSkill`. Skills are set by name, not path.
+### Choose the models
 
-**Check it worked.** Press Ctrl+O and look for a line like `requested opus, ran claude-opus-...`.
+Put these in a `.env` file in the project where you run Claude Code (the session's working directory, not the mod folder):
+
+```bash
+SKILL_ROUTER_PLANNING_MODEL=opus
+SKILL_ROUTER_EXECUTION_MODEL=haiku
+```
+
+Or set them in the shell for one run:
+
+```bash
+SKILL_ROUTER_PLANNING_MODEL=opus SKILL_ROUTER_EXECUTION_MODEL=haiku \
+  claude --plugin-dir ~/mods/claude-mods/skill-router
+```
+
+Either variable can be set alone. Order of precedence, per phase:
+
+1. shell environment
+2. `.env`
+3. `/config` (`planningModel`, `executionModel`)
+4. default (`opus` / `sonnet`)
+
+Values are read once, on the first request, so changing them needs a restart. The mod reads only these two keys from `.env`, but it does read the whole file into memory, so keep `.env` out of git.
+
+### Aliases and full IDs
+
+The mod passes your string through unchanged. It does not look up or compare versions.
+
+| You set | Result |
+| :- | :- |
+| `opus`, `sonnet`, `haiku` | An alias. Claude Code decides which version it means, and that can change when Claude Code updates. |
+| `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` | A full ID. The version is pinned. |
+
+Aliases are documented for subagents and `$.model.complete`; whether `turn.step` accepts them is unconfirmed. If an alias fails, use a full ID.
+
+### Check it worked
+
+Press Ctrl+O. On the first request you will see `skill-router: planning=... execution=...` with the models in use. After that, each switch logs `requested <your string>, ran <model>`. `ran` is the concrete model the API reports, so it shows which version actually answered.
+
+### Other settings
+
+In `/config`: `plannerSkill` and `executorSkill`. Skills are set by name, not path.
 
 ---
 
@@ -117,6 +158,7 @@ const PRICES: Record<string, Price> = {
 - Subagent requests count toward phase totals but not last/peak turn.
 - phase-meter reads the model name from `usage.model`, then `result.model`, then `e.model`. These field shapes are assumptions.
 - Long lines may truncate in a narrow pane.
+- skill-router's tests cover phase selection only. The test engine has no environment or file API, so the `.env` and variable overrides are checked by hand (see below).
 
 ## Development
 
@@ -125,6 +167,8 @@ claude plugin validate ./skill-router
 claude plugin test ./skill-router
 claude --plugin-dir ./skill-router   # reloads when you save
 ```
+
+To check the model overrides by hand: set `SKILL_ROUTER_PLANNING_MODEL` and `SKILL_ROUTER_EXECUTION_MODEL` in `.env`, restart, run `/planner x`, then `/executor x`, and confirm the `requested ..., ran ...` lines.
 
 ## License
 
