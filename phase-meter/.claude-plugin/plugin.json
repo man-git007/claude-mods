@@ -1,0 +1,8 @@
+{
+  "name": "phase-meter",
+  "version": "0.1.0",
+  "description": "Per-phase (plan/exec) and per-model token usage: live spinner readout and a /phase-meter pane",
+  "author": {
+    "name": "Manish"
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "name": "phase-switch",
+  "name": "skill-router",
   "version": "0.1.0",
   "description": "Runs the planner skill on a strong model and the executor skill on a cheaper one, switching automatically",
   "types": "./types/index.d.ts",
@@ -27,12 +27,9 @@
       "title": "Executor skill name",
       "description": "Skill whose activation starts the execution phase",
       "default": "executor"
-    },
-    "autoReplan": {
-      "type": "boolean",
-      "title": "Return to planning on a blocked step",
-      "description": "When the executor reports a blocked step, switch back to the planning model and draft a re-plan prompt",
-      "default": true
     }
+  },
+  "author": {
+    "name": "Manish"
   }
 }

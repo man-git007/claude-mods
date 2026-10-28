@@ -1,4 +1,4 @@
-const PANE = 'phase-usage'
+const PANE = 'phase-meter'
 
 // ---- CONFIG ---------------------------------------------------------------
 // Session budget in non-cache tokens (input + output + cache-write). 0 = off.
@@ -25,7 +25,8 @@ let warned100 = false
 
 // ---- THE ONE THING TO ADAPT: where the active phase comes from ----------
 // Tries env var CLAUDE_PHASE, then the file ~/.claude/phase. Edit to match
-// however your phase-switch records the phase.
+// however your workflow records the phase (skill-router keeps its phase in
+// memory and writes neither).
 async function currentPhase($: any): Promise<string> {
   try {
     const fromEnv = await $.env.get('CLAUDE_PHASE')
@@ -184,15 +185,15 @@ async function sessionLines($: any, Text: any): Promise<any[]> {
 export function register(on: any): void {
   on('session.start', async ($: any, e: any, next: any) => {
     await $.command.register({
-      name: 'phase-usage',
+      name: 'phase-meter',
       description: 'Show token usage, cache efficiency and cost by phase',
       immediate: true,
     })
     return next(e)
   })
 
-  on('command.run', { command: 'phase-usage' }, async ($: any) => {
-    await $.ui.open({ id: PANE, title: 'Phase usage', focus: true, closeOnEscape: true })
+  on('command.run', { command: 'phase-meter' }, async ($: any) => {
+    await $.ui.open({ id: PANE, title: 'Phase meter', focus: true, closeOnEscape: true })
     return {}
   })
 

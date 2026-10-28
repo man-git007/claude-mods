@@ -1,6 +1,0 @@
-{
-  "name": "phase-usage",
-  "version": "0.1.0",
-  "description": "Per-phase (plan/exec) and per-model token usage: live spinner readout and a /phase-usage pane with a pie chart",
-  "author": { "name": "Manish" }
-}

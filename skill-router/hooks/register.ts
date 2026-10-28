@@ -3,7 +3,7 @@ import type { Register } from 'claude-code'
 
 import type { Phase } from '../types'
 
-const phaseAtom = atom({ plugin: 'phase-switch', key: 'phase' } as const, 'off' as Phase)
+const phaseAtom = atom({ plugin: 'skill-router', key: 'phase' } as const, 'off' as Phase)
 
 export const register: Register = (on, options) => {
   const planningModel = String(options.planningModel ?? 'opus')

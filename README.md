@@ -1,156 +1,129 @@
-# phase-usage
+# Phase Tools for Claude Code
 
-A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that shows token usage split by **phase** (for example `plan` and `exec`) and by model, so you can see where your tokens go and stay inside your limits.
+Two small [Claude Code mods](https://code.claude.com/docs/en/plugins/mods/overview) for a plan-then-execute workflow:
 
-Claude Code's built-in `/usage` and `/cost` give session totals. They don't know about your workflow phases. This mod tags every model request with the phase that was active when it was sent, then reports per-phase spend, cache efficiency, and cost.
+| Mod | What it does |
+| :- | :- |
+| **skill-router** | Switches the model automatically when the `planner` or `executor` skill loads. |
+| **phase-meter** | Shows token usage per phase and per model. |
 
-> **Status:** early. It loads and runs on the documented mods API, but a few field shapes (noted under [Limitations](#limitations)) are assumptions. Issues and fixes welcome.
-
-## Features
-
-- **Live readout** beside the spinner while Claude works: `plan 12.4k · exec 40.1k…`
-- **`/phase-usage` pane** with:
-  - a percentage bar of spend per phase
-  - per phase: request count, average output per request, fresh input, output, cache-write, cache-read, cache hit rate, and estimated cost
-  - session: context-window fill, plan rate-limit percentages and reset times, last and peak turn size, token pace, budget progress, and Claude Code's own cost estimate
-- **Budget toasts** at 80% and 100% of a token budget you set
-- **Reset button** (`r`) to clear the session's numbers
+Use either one alone, or both together.
 
 ## Requirements
 
-- Claude Code **v2.1.287 or later** (mods are on by default from that version)
-- Terminal, Desktop app, or VS Code extension for the pane. Hooks also run in `claude -p`, but nothing draws there.
+Claude Code v2.1.287 or later.
 
 ## Install
 
-Clone the repository and load it for a session:
-
 ```bash
-git clone <your-repo-url> ~/mods/phase-usage
-claude --plugin-dir ~/mods/phase-usage
+git clone <your-repo-url> ~/mods/claude-mods
 ```
 
-To load it every time, set `CLAUDE_CODE_PLUGIN_DIRS` (absolute paths, separated by `:`):
+Load both mods:
 
 ```bash
-export CLAUDE_CODE_PLUGIN_DIRS="$HOME/mods/phase-usage"
+claude --plugin-dir ~/mods/claude-mods/skill-router --plugin-dir ~/mods/claude-mods/phase-meter
 ```
 
-To load it alongside other mods, repeat the flag:
+To load them every time, add this to your shell profile (absolute paths, separated by `:`):
 
 ```bash
-claude --plugin-dir ~/mods/phase-switch --plugin-dir ~/mods/phase-usage
+export CLAUDE_CODE_PLUGIN_DIRS="$HOME/mods/claude-mods/skill-router:$HOME/mods/claude-mods/phase-meter"
 ```
 
-Run `/plugin` and look for `mods active` to confirm it loaded.
-
-### Security
-
-A mod is code that runs with your permissions, inside Claude Code. It can read your session and environment. Before loading any mod, list what it does:
+Or use an alias:
 
 ```bash
-claude plugin validate ~/mods/phase-usage
+alias claude='claude --plugin-dir ~/mods/claude-mods/skill-router --plugin-dir ~/mods/claude-mods/phase-meter'
 ```
 
-This mod reads the `CLAUDE_PHASE` environment variable and `$HOME`, reads `~/.claude/phase`, and makes no network requests.
+Run `/plugin` and look for `2 mods active` to confirm both loaded.
 
-## Usage
+Mods run with your permissions. Before loading one, list what it does:
 
-1. Start Claude Code with the plugin loaded.
-2. Work as usual. The spinner shows spend per phase.
-3. Type `/phase-usage` to open the pane. Press `Esc` to close it, `r` to reset.
+```bash
+claude plugin validate ~/mods/claude-mods/skill-router
+claude plugin validate ~/mods/claude-mods/phase-meter
+```
 
-Numbers are **per session** and held in memory. They reset when you restart Claude Code.
+---
 
-## Configuration
+## skill-router
 
-Edit the constants at the top of `hooks/register.ts`.
+You do not need to run `/model` to change models.
 
-### Phase source
+- `/planner ...` switches to the planning model (default `opus`).
+- `/executor ...` switches to the execution model (default `sonnet`).
 
-`currentPhase()` decides which phase a request belongs to. By default it reads, in order:
+This also works when Claude loads the skill itself.
 
-1. the `CLAUDE_PHASE` environment variable
-2. the first line of `~/.claude/phase`
-3. otherwise `unknown`
+**How it works.** Loading a skill triggers the mod's `skill.prompt` hook, which records the phase. Its `turn.step` hook then names that phase's model on every request the main conversation makes. `/model` and your session setting are never changed.
 
-Make whatever switches your phase write one of those, or edit `currentPhase()` to read your own source. The phase is read when a request is **sent**, so a switch mid-request doesn't misattribute it.
+**Behavior**
 
-### Token budget
+- Before any skill loads, your normal session model is used.
+- The last skill loaded wins, so `/planner` after `/executor` switches back.
+- Subagents keep their own model.
+- The prompt cache is not shared between models, so the first request after a switch re-reads the full context at full price.
+- On organization-managed installs, `skill.prompt` hooks may not run for plugins you install yourself. If the model does not switch, ask your admin to allow the plugin.
+
+**Settings** (in `/config`): `planningModel`, `executionModel`, `plannerSkill`, `executorSkill`. Skills are set by name, not path.
+
+**Check it worked.** Press Ctrl+O and look for a line like `requested opus, ran claude-opus-...`.
+
+---
+
+## phase-meter
+
+Claude Code's `/usage` and `/cost` show session totals only. phase-meter tags each model request with the active phase and reports per-phase tokens, cache hit rate, and cost.
+
+1. Work as usual. The spinner shows spend per phase, like `plan 12.4k · exec 40.1k`.
+2. Type `/phase-meter` to open the pane. `Esc` closes it, `r` resets.
+
+The pane shows spend per phase, requests, cache hit rate, estimated cost, context-window fill, plan limits, and token budget progress. Numbers are per session and reset on restart.
+
+**Configuration.** Edit the constants at the top of `phase-meter/hooks/register.ts`.
+
+Token budget (input + output + cache-write tokens; `0` turns it off). A toast appears at 80% and 100%:
 
 ```ts
-const BUDGET_TOKENS = 0 // non-cache tokens per session. 0 = off
+const BUDGET_TOKENS = 0
 ```
 
-Counts input + output + cache-write tokens. A toast appears at 80% and 100%.
-
-### Prices
-
-Cost is only shown for models you price. Prices are USD per 1M tokens, matched by a case-insensitive substring of the model name:
+Prices (USD per 1M tokens, matched by a case-insensitive part of the model name). Cost shows only for models you price:
 
 ```ts
 const PRICES: Record<string, Price> = {
-  'sonnet': { in: 3, out: 15, cr: 0.3, cc: 3.75 }, // example shape, use your provider's real prices
+  'sonnet': { in: 3, out: 15, cr: 0.3, cc: 3.75 }, // example, use real prices
 }
 ```
 
-If a phase used a model with no entry, its cost is shown as a lower bound. With `PRICES` empty, the pane shows `cost n/a`.
+**Phase source.** phase-meter reads the phase from the `CLAUDE_PHASE` environment variable, then the first line of `~/.claude/phase`, otherwise `unknown`. skill-router keeps its phase in memory and does not write either, so until you set one, usage is grouped under `unknown`.
 
-## What the numbers mean
+**What the numbers mean**
 
 | Stat | Definition |
 | :- | :- |
-| Spend | `input + output + cache-write`. Cache reads are excluded because they dominate volume and are billed far lower. |
-| Cache hit rate | `cache-read ÷ (input + cache-read + cache-write)`. A falling rate usually means something is breaking your prompt cache. |
-| Last / peak turn | Spend of the most recent and the largest main-conversation turn (subagent turns excluded). |
-| Context | Tokens in the context window ÷ window size, from `$.session.usage()`. |
-| Limits | Plan rate-limit percent used and reset time, from `$.session.usage()`. |
-| Cost (Claude Code) | Claude Code's own session estimate, computed at Anthropic pricing. Ignore it if a phase routes to a non-Anthropic backend. |
+| Spend | input + output + cache-write. Cache reads are excluded. |
+| Cache hit rate | cache-read ÷ (input + cache-read + cache-write). A falling rate usually means something is breaking your cache. |
+| Last / peak turn | Spend of the latest and largest main-conversation turn. |
+| Cost (Claude Code) | Claude Code's own estimate at Anthropic prices. Ignore it for non-Anthropic backends. |
 
-## How it works
-
-| Event | What the mod does |
-| :- | :- |
-| `turn.step` | Reads `result.usage` after each request, tags it with the phase and model, checks the budget |
-| `turn.complete` | Records last and peak turn size |
-| `ui.render` (Spinner) | Adds the per-phase readout |
-| `ui.render` (Pane) | Draws the `/phase-usage` pane |
-| `session.start` / `command.run` | Registers and opens `/phase-usage` |
-
-Layout:
-
-```
-phase-usage/
-├── .claude-plugin/plugin.json
-└── hooks/
-    ├── hooks.json      # {"modules": ["./register.ts"]}
-    └── register.ts
-```
+---
 
 ## Limitations
 
-- **Per session only.** Nothing is persisted. The mods `$.store` is shared across sessions and writes race, so persistence needs per-key writes.
-- **Subagents** are included in the phase totals but not in last/peak turn.
-- **Non-Anthropic backends:** token counts are only as accurate as what the backend reports. Treat dollar figures from Claude Code's own estimate as invalid in that case.
-- **Assumed field shapes:** the docs state `result.usage` has `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, plus the model, but not where the model name sits. This mod reads `usage.model`, then `result.model`, then `e.model`. `turn.complete`'s `e.usage` is assumed to use the same field names.
-- **Pane width:** lines are long. In a narrow pane they may truncate or scroll.
-- **Context percentage:** if `$.session.usage().context.tokens` is missing, the context line may be wrong or absent.
+- phase-meter is per session only. Nothing is saved.
+- Subagent requests count toward phase totals but not last/peak turn.
+- phase-meter reads the model name from `usage.model`, then `result.model`, then `e.model`. These field shapes are assumptions.
+- Long lines may truncate in a narrow pane.
 
 ## Development
 
 ```bash
-claude plugin validate ./phase-usage      # check manifest, events, and calls
-claude --plugin-dir ./phase-usage         # reloads the hooks module when you save
-```
-
-Mods can be tested without a session with `claude plugin test`. See [Test a mod](https://code.claude.com/docs/en/plugins/mods/test).
-
-## Contributing
-
-Issues and pull requests are welcome. If a number looks wrong, attach the output of a debug line such as:
-
-```ts
-$.ui.log('usage=' + JSON.stringify(result?.usage))
+claude plugin validate ./skill-router
+claude plugin test ./skill-router
+claude --plugin-dir ./skill-router   # reloads when you save
 ```
 
 ## License
