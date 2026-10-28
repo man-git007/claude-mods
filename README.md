@@ -9,9 +9,37 @@ Two small [Claude Code mods](https://code.claude.com/docs/en/plugins/mods/overvi
 
 Use either one alone, or both together.
 
+## Do you need skill-router?
+
+Possibly not. skill-router may be redundant, depending on what you want automated.
+
+**What Claude Code already does without a mod**
+
+- `/model <alias|name>` switches the model for the whole session, manually. Switching mid-conversation re-reads the history without cache, the same cost as the mod's switches.
+- The `opusplan` alias uses opus in Plan Mode and sonnet for execution. Toggle Plan Mode with Shift+Tab. Set it with `claude --model opusplan` or `/model opusplan`.
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` and `ANTHROPIC_DEFAULT_SONNET_MODEL` choose which concrete models `opusplan` uses.
+- A subagent's `model:` field sets that subagent's model.
+
+**What only skill-router does**
+
+- Switches when a skill you name in the config loads (`/planner`, `/executor`), not when Plan Mode is toggled.
+- Reads the planning and execution models from `.env` or the shell, per project.
+
+That is all it does. It does not pass the plan file to the executor, return to planning on a blocked step, or draw a status line.
+
+**Recommendation**
+
+- If your workflow is plan in Plan Mode, approve, then execute, use `opusplan`. It is built in and needs no maintenance.
+- Use skill-router only if you want a skill-driven workflow: a planner skill and an executor skill. It ships with both (see [Bundled skills](#bundled-skills)), and you can replace them with your own. The mod only acts when a skill with a matching name loads; otherwise it does nothing.
+- The mod adds hooks you must maintain, and on organization-managed installs `skill.prompt` hooks may not fire for plugins you install yourself.
+- phase-meter does not depend on skill-router, but it needs a phase source (see phase-meter below). Until you set `CLAUDE_PHASE` or `~/.claude/phase`, it groups usage under `unknown`.
+
+---
+
 ## Requirements
 
-Claude Code v2.1.287 or later.
+- Claude Code v2.1.287 or later.
+- **For skill-router:** a planner skill and an executor skill. Both are included in `skill-router/skills/` and available whenever the mod is loaded. To use your own skills instead, install them (for example `.claude/skills/<name>/SKILL.md`) and set `plannerSkill` and `executorSkill` to their names.
 
 ## Install
 
@@ -65,6 +93,7 @@ This also works when Claude loads the skill itself.
 - The last skill loaded wins, so `/planner` after `/executor` switches back.
 - Subagents keep their own model.
 - The prompt cache is not shared between models, so the first request after a switch re-reads the full context at full price.
+- It switches only when a skill whose name matches `plannerSkill` or `executorSkill` loads. The bundled skills match by default; with no matching skill it does nothing.
 - The models must be available on the endpoint and plan your session started with. The mod cannot switch endpoints.
 - On organization-managed installs, `skill.prompt` hooks may not run for plugins you install yourself. If the model does not switch, ask your admin to allow the plugin.
 
@@ -107,6 +136,32 @@ Aliases are documented for subagents and `$.model.complete`; whether `turn.step`
 ### Check it worked
 
 Press Ctrl+O. On the first request you will see `skill-router: planning=... execution=...` with the models in use. After that, each switch logs `requested <your string>, ran <model>`. `ran` is the concrete model the API reports, so it shows which version actually answered.
+
+### Bundled skills
+
+skill-router includes a planner skill and an executor skill. You can use them as they are or edit them to fit your process.
+
+```
+skill-router/
+├── .claude-plugin/plugin.json
+├── hooks/                       # the mod (hooks.json, register.ts, tests)
+└── skills/
+    ├── planner/SKILL.md
+    └── executor/SKILL.md
+```
+
+**Use them.** Load the mod, then run the planner skill, then the executor skill. Plugin skills are normally run with the plugin name as a prefix, so expect `/skill-router:planner` and `/skill-router:executor`. Type `/` to see the exact names.
+
+**Modify them.** Edit the text of `skills/planner/SKILL.md` and `skills/executor/SKILL.md`. Keep these rules:
+
+- The file must be named `SKILL.md`. A file named `CLAUDE.md` is not a skill.
+- Keep the frontmatter (`name` and `description`) at the top.
+- Keep each skill in its own folder under `skills/`.
+- After editing, run `/reload-plugins` or restart Claude Code.
+
+**Rename or replace them.** The mod switches models by matching the loaded skill's name against `plannerSkill` and `executorSkill` in `/config`. If you rename a skill, or use your own, change those settings to match.
+
+**If the model does not switch.** The name Claude Code reports for a plugin skill may include the prefix (`skill-router:planner`). Set `plannerSkill` and `executorSkill` to the full prefixed names, then restart and check the `requested ..., ran ...` lines (Ctrl+O).
 
 ### Other settings
 
